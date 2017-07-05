@@ -4,6 +4,8 @@
 #include <dinput.h>
 #include <tchar.h>
 
+#include "Profiler.h"
+
 // Data
 static ID3D11Device*            g_pd3dDevice = NULL;
 static ID3D11DeviceContext*     g_pd3dDeviceContext = NULL;
@@ -136,18 +138,19 @@ int main(int, char**)
       DispatchMessage(&msg);
       continue;
     }
-    ImGuiImplNewFrame();
+    Profiler::Get()->BeginFrame();
 
-    ImGui::SetNextWindowPos(ImVec2(650, 20), ImGuiSetCond_FirstUseEver);     // Normally user code doesn't need/want to call it because positions are saved in .ini file anyway. Here we just want to make the demo initial state a bit more friendly!
-    ImGui::Begin("Test window");
-    ImGui::Text("tedst window for llsoao saosdoo ewrwiei f[fis");
-    ImGui::End();
+    ImGuiImplNewFrame();
+    Profiler::Get()->Render();
 
     // Rendering
     static ImVec4 clearCol = ImColor(114, 144, 154);
     g_pd3dDeviceContext->ClearRenderTargetView(g_mainRenderTargetView, (float*)&clearCol);
+
     ImGui::Render();
     g_pSwapChain->Present(0, 0);
+
+    Profiler::Get()->EndFrame();
   }
 
   ImGuiImplShutdown();
