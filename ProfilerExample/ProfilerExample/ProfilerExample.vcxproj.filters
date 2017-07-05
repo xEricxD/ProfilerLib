@@ -17,6 +17,9 @@
     <ClCompile Include="Source\ImGuiImpl.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\Source\ImGuiInclude.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Header\ImGuiImpl.h">

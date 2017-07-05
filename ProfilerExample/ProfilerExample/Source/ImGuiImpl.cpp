@@ -45,7 +45,7 @@ struct VERTEX_CONSTANT_BUFFER
 // This is the main rendering function that you have to implement and provide to ImGui (via setting up 'RenderDrawListsFn' in the ImGuiIO structure)
 // If text or lines are blurry when integrating ImGui in your engine:
 // - in your Render function, try translating your projection matrix by (0.5f,0.5f) or (0.375f,0.375f)
-void ImGui_Impl_RenderDrawLists(ImDrawData* draw_data)
+void ImGuiImplRenderDrawLists(ImDrawData* draw_data)
 {
   ID3D11DeviceContext* ctx = g_pd3dDeviceContext;
 
@@ -232,7 +232,7 @@ void ImGui_Impl_RenderDrawLists(ImDrawData* draw_data)
   ctx->IASetInputLayout(old.InputLayout); if (old.InputLayout) old.InputLayout->Release();
 }
 
-IMGUI_API LRESULT ImGui_Impl_WndProcHandler(HWND, UINT msg, WPARAM wParam, LPARAM lParam)
+IMGUI_API LRESULT ImGuiImplWndProcHandler(HWND, UINT msg, WPARAM wParam, LPARAM lParam)
 {
   ImGuiIO& io = ImGui::GetIO();
   switch (msg)
@@ -279,7 +279,7 @@ IMGUI_API LRESULT ImGui_Impl_WndProcHandler(HWND, UINT msg, WPARAM wParam, LPARA
   return 0;
 }
 
-static void ImGui_Impl_CreateFontsTexture()
+static void ImGuiImplCreateFontsTexture()
 {
   // Build texture atlas
   ImGuiIO& io = ImGui::GetIO();
@@ -338,12 +338,12 @@ static void ImGui_Impl_CreateFontsTexture()
   }
 }
 
-bool ImGui_Impl_CreateDeviceObjects()
+bool ImGuiImplCreateDeviceObjects()
 {
   if (!g_pd3dDevice)
     return false;
   if (g_pFontSampler)
-    ImGui_Impl_InvalidateDeviceObjects();
+    ImGuiImplInvalidateDeviceObjects();
 
   // By using D3DCompile() from <d3dcompiler.h> / d3dcompiler.lib, we introduce a dependency to a given version of d3dcompiler_XX.dll (see D3DCOMPILER_DLL_A)
   // If you would like to use this DX11 sample code but remove this dependency you can: 
@@ -474,12 +474,12 @@ bool ImGui_Impl_CreateDeviceObjects()
     g_pd3dDevice->CreateDepthStencilState(&desc, &g_pDepthStencilState);
   }
 
-  ImGui_Impl_CreateFontsTexture();
+  ImGuiImplCreateFontsTexture();
 
   return true;
 }
 
-void  ImGui_Impl_InvalidateDeviceObjects()
+void ImGuiImplInvalidateDeviceObjects()
 {
   if (!g_pd3dDevice)
     return;
@@ -500,7 +500,7 @@ void  ImGui_Impl_InvalidateDeviceObjects()
   if (g_pVertexShaderBlob) { g_pVertexShaderBlob->Release(); g_pVertexShaderBlob = NULL; }
 }
 
-bool  ImGui_Impl_Init(void* hwnd, ID3D11Device* device, ID3D11DeviceContext* device_context)
+bool ImGuiImplInit(void* hwnd, ID3D11Device* device, ID3D11DeviceContext* device_context)
 {
   g_hWnd = (HWND)hwnd;
   g_pd3dDevice = device;
@@ -532,25 +532,25 @@ bool  ImGui_Impl_Init(void* hwnd, ID3D11Device* device, ID3D11DeviceContext* dev
   io.KeyMap[ImGuiKey_Y] = 'Y';
   io.KeyMap[ImGuiKey_Z] = 'Z';
 
-  io.RenderDrawListsFn = ImGui_Impl_RenderDrawLists;  // Alternatively you can set this to NULL and call ImGui::GetDrawData() after ImGui::Render() to get the same ImDrawData pointer.
+  io.RenderDrawListsFn = ImGuiImplRenderDrawLists;  // Alternatively you can set this to NULL and call ImGui::GetDrawData() after ImGui::Render() to get the same ImDrawData pointer.
   io.ImeWindowHandle = g_hWnd;
 
   return true;
 }
 
-void ImGui_Impl_Shutdown()
+void ImGuiImplShutdown()
 {
-  ImGui_Impl_InvalidateDeviceObjects();
+  ImGuiImplInvalidateDeviceObjects();
   ImGui::Shutdown();
   g_pd3dDevice = NULL;
   g_pd3dDeviceContext = NULL;
   g_hWnd = (HWND)0;
 }
 
-void ImGui_Impl_NewFrame()
+void ImGuiImplNewFrame()
 {
   if (!g_pFontSampler)
-    ImGui_Impl_CreateDeviceObjects();
+    ImGuiImplCreateDeviceObjects();
 
   ImGuiIO& io = ImGui::GetIO();
 
