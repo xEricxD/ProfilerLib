@@ -25,15 +25,21 @@ public:
 
   std::vector<MemoryPager::Page*> &GetPages() { return m_pages; }
 
+  uint32_t GetThreadID() { return m_threadID; }
+  const char* GetThreadName() { return m_threadName; }
+
 private:
   MemoryPager::Page* m_currentPage;
   MemoryPager::Page* m_stackPage;
   uint32_t m_eventDepth;
-
-
+  
   std::vector<MemoryPager::Page*> m_pages;
   std::vector<MemoryPager::Page*> m_stackPages;
   std::vector<ProfilerEvent*> m_eventStack;
+
+  // Thread info
+  char m_threadName[64];
+  uint32_t m_threadID;
 };
 
 // Profiler class
@@ -65,12 +71,35 @@ private:
   ~Profiler();
 
   void ClearOutdatedEvents();
+  void GetCurrentCapture();
 
   static Profiler s_profiler;
+
+  struct ThreadEventInfo
+  {
+    char threadName[64];
+    uint32_t threadID;
+    uint32_t maxDepth; // max event depth for this thread
+
+    std::vector<MemoryPager::Page*> pages;
+    std::vector<ProfilerEvent*> events;
+  };
 
   std::vector<FrameTime> m_frameTimes;
   std::vector<ProfilerEventManager*> m_managers;
   bool m_isOpen;
+
+  // Capture info
+  std::vector<ThreadEventInfo> m_captureInfo;
+  std::vector<FrameTime> m_captureFrameTimes;
+  uint32_t m_numEventsInCapture;
+  uint32_t m_captureTime;
+  FrameTime m_longestFrame;
+
+  // Profiler type data
+  int m_precedingFrameTime;
+  int m_procedingFrameTime;
+  int m_lastXAmountOfTime;
 };
 
 #endif

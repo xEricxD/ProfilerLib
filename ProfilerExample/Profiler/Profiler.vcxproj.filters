@@ -14,6 +14,7 @@
       <Filter>ImGui</Filter>
     </ClCompile>
     <ClCompile Include="MemoryPager.cpp" />
+    <ClCompile Include="ImGuiExtended.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Profiler.h" />
@@ -37,5 +38,6 @@
       <Filter>ImGui</Filter>
     </ClInclude>
     <ClInclude Include="MemoryPager.h" />
+    <ClInclude Include="ImGuiExtended.h" />
   </ItemGroup>
 </Project>
