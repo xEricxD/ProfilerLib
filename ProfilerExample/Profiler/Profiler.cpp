@@ -73,6 +73,7 @@ void ProfilerEventManager::PushEvent(uint32_t color, const char* pFormat)
 
   // Copy name
   size_t len = strlen(pFormat);
+	memset(ev.name, 0, 64);
   memcpy(ev.name, pFormat, len > 64 ? 64 : len);
 
   // Check if event will fit in current page
@@ -137,7 +138,7 @@ Profiler Profiler::s_profiler;
 
 Profiler::Profiler()
   : m_isOpen(true), m_numEventsInCapture(0)
-  , m_precedingFrameTime(10), m_procedingFrameTime(10), m_lastXAmountOfTime((int)(kMaxProfileTime * 0.1f))
+  , m_precedingFrameTime(10), m_procedingFrameTime(10), m_lastXAmountOfTime((int)(100))
 {}
 
 Profiler::~Profiler()
@@ -215,7 +216,7 @@ void Profiler::ClearOutdatedEvents()
       while (page->bufferReadOffset < page->bufferWriteOffset)
       {
         ProfilerEvent* ev = reinterpret_cast<ProfilerEvent*>(page->bufferCurrent);
-        if (ev->startTime + ev->duration >= currTime - kMaxProfileTime)
+        if (ev->startTime + ev->duration >= currTime - (kMaxProfileTime * 1e3))
           break;
 
         page->bufferReadOffset += sizeof(ProfilerEvent);
@@ -239,7 +240,7 @@ void Profiler::GetCurrentCapture()
   m_numEventsInCapture = 0;
   for (auto it = m_captureInfo.begin(); it != m_captureInfo.end(); it++)
   {
-    for (auto p = it->pages.begin(); p != it->pages.end(); it++)
+    for (auto p = it->pages.begin(); p != it->pages.end(); p++)
       MemoryPager::Get()->ReleasePage(*p);
   }
   m_captureInfo.clear();
@@ -320,7 +321,7 @@ void Profiler::Render()
   ImGui::PushItemWidth(ImGui::GetWindowSize().x * 0.25f);
   enum ProfilerType : int { kShowLongestFrame = 0, kLongestFrameWithMargin, kLastXMilliseconds };
   const char* comboItems[] = { "Show Longest Frame", "Show Longest Frame with Margin", "Show Last X Amount of Time" };
-  static int type = kShowLongestFrame;
+  static int type = kLastXMilliseconds;
   ImGui::Combo("Profile Mode", &type, comboItems, 3);
   ImGui::PopItemWidth();
 
@@ -348,8 +349,8 @@ void Profiler::Render()
   ImGui::SliderFloat("Zoom (temp)", &zoomLevel, 0, 1000);
 
   // Setup some information we need to help display
-  uint32_t startTime = 0;
-  uint32_t displayTime = 0; // total time we will display for this frame
+  int startTime = 0;
+	int displayTime = 0; // total time we will display for this frame
   switch (type)
   {
   case kShowLongestFrame:
@@ -365,9 +366,7 @@ void Profiler::Render()
     displayTime = m_lastXAmountOfTime;
     break;
   }
-
-  //int visibleDisplayTime = 0; // total time that is visible on the screen TODO
-  
+	  
   // Create profiler layout, will be filled with data later
   ImGui::BeginChild("ThreadData", ImVec2(ImGui::GetWindowSize().x * 0.15f, 0), false, ImGuiWindowFlags_NoScrollbar);
   ImGui::EndChild();
@@ -385,21 +384,34 @@ void Profiler::Render()
   // Store current cursor pos
   ImVec2 cursorScreenPosStart = ImGui::GetCursorScreenPos();
 
-  // Calculate  how big each MS will be displayed
+  // Calculate how big each MS will be displayed
   float step = 20 + (zoomLevel * 0.2f);
   ImGui::SetCursorScreenPos(ImVec2(cursorScreenPosStart.x, ImGui::GetWindowPos().y));
+	
+	// Set the event window size
+	ImVec2 curPosStart = ImGui::GetCursorScreenPos();
+	ImGui::SetCursorScreenPos(ImVec2(curPosStart.x + (step * displayTime), ImGui::GetWindowPos().y));
+	ImGui::SetCursorScreenPos(ImVec2(curPosStart.x, ImGui::GetWindowPos().y));
+	
+	// calculate visibility
+	int displayTimeStart = (int)(ImGui::GetScrollX() / step); // round down
+	int displayTimeEnd = std::fmin((int)(displayTimeStart + ImGui::GetWindowSize().x / step) + 2, displayTime); // round up;
+	int displayTimeVisible = displayTimeEnd - displayTimeStart;
 
-  for (uint32_t i = 0; i < displayTime; i++)
+	// Set cursorpos to first visible ms
+	ImGui::SetCursorScreenPos(ImVec2(curPosStart.x + (step * displayTimeStart), ImGui::GetWindowPos().y));
+  for (uint32_t i = displayTimeStart; i < displayTimeEnd; i++)
   {
     ImVec2 curPos = ImGui::GetCursorScreenPos();
     ImGui::Text("%i", i);
     if ((i % 2) == 0)
       ImGui::GetWindowDrawList()->AddRectFilled(curPos, ImVec2(curPos.x + step, curPos.y + ImGui::GetWindowSize().y), IM_COL32(50, 50, 50, 200));
-
+	
     ImGui::SetCursorScreenPos(ImVec2(curPos.x + step, ImGui::GetWindowPos().y));
   }
   cursorScreenPosStart.y += ImGui::GetTextLineHeight();
   ImVec2 cursorScreenPosEnd = ImVec2(cursorScreenPosStart.x + (step * displayTime), cursorScreenPosStart.y);
+
   ImGui::SetCursorScreenPos(cursorScreenPosStart);
 
   ImGui::EndChild();
@@ -407,17 +419,19 @@ void Profiler::Render()
   // Draw frame times
   ImGui::BeginChild("EventData", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
 
+	// Calculate default item height we'll be using
+	float itemHeight = (ImGui::GetWindowFontSize() + ImGui::GetStyle().FramePadding.y * 2) * 0.35f;
+	float lineheight = itemHeight * 1.2f;
+
   for (auto it = m_captureFrameTimes.begin(); it != m_captureFrameTimes.end(); it++)
   {
-    if (it->startTime + it->duration < startTime || it->startTime > startTime + displayTime) // TODO -> replace displaytime with visible display time
+    if (it->startTime + it->duration < startTime + displayTimeStart || it->startTime > startTime + displayTimeStart + displayTimeVisible)
       continue;
 
     // Frame is atleast partially inside the time we're displaying, so render it
-    float itemHeight = (ImGui::GetWindowFontSize() + ImGui::GetStyle().FramePadding.y * 2) * 0.35f;
-
     // Calculate start pos
     float totalProfileLength = (float)(cursorScreenPosEnd.x - cursorScreenPosStart.x);
-    float startP = (float)((float)it->startTime - startTime) / displayTime;
+    float startP = (float)(it->startTime - startTime) / displayTime;
     ImVec2 framePos((startP * totalProfileLength) + cursorScreenPosStart.x, cursorScreenPosStart.y);
     // Calculate size
     ImVec2 frameSize(((float)it->duration / displayTime) * totalProfileLength, itemHeight);
@@ -425,7 +439,7 @@ void Profiler::Render()
 
     if (ImGui_ClipRect(framePos, frameEnd, clipRectPos, clipRectEnd))
     {
-      ImGui::GetWindowDrawList()->AddRectFilled(framePos, frameEnd, IM_COL32(it->duration, 200, 200, 255)); // TODO - randomize frame color
+      ImGui::GetWindowDrawList()->AddRectFilled(framePos, frameEnd, IM_COL32(std::fmin(it->duration * 5, 255), 200, 200, 255)); // TODO - randomize frame color
       if (ImGui_IsItemHovered(framePos, frameEnd))
       {
         ImGui::BeginTooltip();
@@ -434,8 +448,58 @@ void Profiler::Render()
       }
     }
   }
+	ImGui::EndChild();
 
-  ImGui::EndChild();
+	ImGui::BeginChild("EventData", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
+	// Update cursor pos and item size
+	itemHeight = (ImGui::GetWindowFontSize() + ImGui::GetStyle().FramePadding.y * 2) * 0.6f;
+	lineheight = itemHeight * 1.2f;
+	cursorScreenPosStart.y += lineheight;
+	ImGui::SetCursorScreenPos(cursorScreenPosStart);
+	ImGui::EndChild();
+
+	// Draw events for each thread
+	for (auto it = m_captureInfo.begin(); it != m_captureInfo.end(); it++)
+	{
+		ThreadEventInfo &info = *it;
+
+		// TODO - render thread info for left panel (name, num events, etc)
+		ImGui::BeginChild("ThreadData", ImVec2(ImGui::GetWindowSize().x * 0.15f, 0), false, ImGuiWindowFlags_NoScrollbar);
+		ImGui::EndChild();
+
+		// Render event data
+		ImGui::BeginChild("EventData", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
+		// TODO - clip event range (binary search)
+		for (auto evIt = info.events.begin(); evIt != info.events.end(); evIt++)
+		{
+			ProfilerEvent* ev = *evIt;
+
+			// Clip if event is out of visible range
+			if (ev->startTime + ev->duration < startTime + displayTimeStart || ev->startTime > startTime + displayTimeStart + displayTimeVisible)
+				continue;
+
+			// Calculate start pos
+			float totalProfileLength = (float)(cursorScreenPosEnd.x - cursorScreenPosStart.x);
+			float startP = (float)(ev->startTime - startTime) / displayTime;
+			ImVec2 framePos((startP * totalProfileLength) + cursorScreenPosStart.x, cursorScreenPosStart.y);
+			// Calculate size
+			ImVec2 frameSize(((float)ev->duration / displayTime) * totalProfileLength, itemHeight);
+			ImVec2 frameEnd(framePos.x + frameSize.x, framePos.y + frameSize.y);
+
+			if (ImGui_ClipRect(framePos, frameEnd, clipRectPos, clipRectEnd))
+			{
+				ImGui::GetWindowDrawList()->AddRectFilled(framePos, frameEnd, ev->color);
+				if (ImGui_IsItemHovered(framePos, frameEnd))
+				{
+					ImGui::BeginTooltip();
+					ImGui::Text("%s (%ums)", ev->name, ev->duration);
+					ImGui::EndTooltip();
+				}
+			}
+		}
+		ImGui::EndChild();
+	}
+
 
   ImGui::End(); // end profiler window
 }

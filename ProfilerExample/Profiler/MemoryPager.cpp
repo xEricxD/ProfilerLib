@@ -10,14 +10,18 @@ MemoryPager::~MemoryPager()
 {
   for (auto it = m_freeList.begin(); it != m_freeList.end(); it)
   {
-    ReleasePage(*it);
+		Page* page = *it;
+		delete[] page->bufferStart;
+		delete page;
     it = m_freeList.erase(it);
   }
 
   for (auto it = m_usedList.begin(); it != m_usedList.end(); it)
   {
-    ReleasePage(*it);
-    it = m_usedList.erase(it);
+		Page* page = *it;
+		delete[] page->bufferStart;
+		delete page;
+		it = m_usedList.erase(it);
   }
 }
 
@@ -49,6 +53,8 @@ void MemoryPager::ReleasePage(Page* page)
 
       m_usedList.erase(it);
       m_freeList.push_back(page);
+
+			return;
     }
   }
 }

@@ -6,10 +6,10 @@
 // Single event data
 struct ProfilerEvent
 {
-  uint32_t startTime;   // 4 -> 4
-  uint32_t duration;    // 4 -> 8
-  uint32_t color;       // 4 -> 12
-  uint32_t depth;       // 4 -> 16
+  int32_t startTime;   // 4 -> 4
+	int32_t duration;    // 4 -> 8
+	int32_t color;       // 4 -> 12
+	int32_t depth;       // 4 -> 16
   char name[64];        // 64 -> 80
 };
 
@@ -49,8 +49,8 @@ public:
   static const uint32_t kMaxProfileTime = (uint32_t)10e3; // 10 second buffer
   struct FrameTime
   {
-    uint32_t startTime;
-    uint32_t duration;
+		int32_t startTime;
+		int32_t duration;
   };
 
   static Profiler* Get() { return &s_profiler; }

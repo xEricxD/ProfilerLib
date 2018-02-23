@@ -79,7 +79,7 @@ extern LRESULT ImGuiImplWndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARA
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
   if (ImGuiImplWndProcHandler(hWnd, msg, wParam, lParam))
-    return true;
+    return 0;
 
   switch (msg)
   {
@@ -109,7 +109,7 @@ int main(int, char**)
   // Create application window
   WNDCLASSEX wc = { sizeof(WNDCLASSEX), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(NULL), NULL, LoadCursor(NULL, IDC_ARROW), NULL, NULL, _T("ImGui Example"), NULL };
   RegisterClassEx(&wc);
-  HWND hwnd = CreateWindow(_T("ImGui Example"), _T("Profiler Example"), WS_OVERLAPPEDWINDOW, 100, 100, 1920, 1080, NULL, NULL, wc.hInstance, NULL);
+  HWND hwnd = CreateWindow(_T("ImGui Example"), _T("Profiler Example"), WS_OVERLAPPEDWINDOW, 100, 100, 1600, 900, NULL, NULL, wc.hInstance, NULL);
 
   // Initialize Direct3D
   if (CreateDeviceD3D(hwnd) < 0)
@@ -126,6 +126,8 @@ int main(int, char**)
   // Setup ImGui binding
   ImGuiImplInit(hwnd, g_pd3dDevice, g_pd3dDeviceContext);
 
+	// Frame variales
+	int frameCounter = 0;
 
   // Main loop
   MSG msg;
@@ -140,10 +142,15 @@ int main(int, char**)
     }
     Profiler::Get()->BeginFrame();
 
+		Profiler::Get()->BeginEvent(0, "Random event 1 %i", frameCounter);
+		Sleep(20 + (rand() % 20));
+		Profiler::Get()->EndEvent();
+
     ImGuiImplNewFrame();
+
+		Profiler::Get()->BeginEvent(0, "Profiler render" );
     Profiler::Get()->Render();
-    
-    Sleep(20 + (rand() % 5));
+		Profiler::Get()->EndEvent();
 
     // Rendering
     static ImVec4 clearCol = ImColor(114, 144, 154);
@@ -153,6 +160,8 @@ int main(int, char**)
     g_pSwapChain->Present(0, 0);
 
     Profiler::Get()->EndFrame();
+
+		frameCounter++;
   }
 
   ImGuiImplShutdown();
