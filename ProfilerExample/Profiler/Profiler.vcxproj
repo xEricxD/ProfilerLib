@@ -234,6 +234,8 @@
     <ClInclude Include="MemoryPager.h" />
     <ClInclude Include="Profiler.h" />
     <ClInclude Include="targetver.h" />
+    <ClInclude Include="TimedEvent.h" />
+    <ClInclude Include="Timer.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="ImGuiExtended.cpp" />
@@ -241,6 +243,8 @@
     <ClCompile Include="imgui\imgui_draw.cpp" />
     <ClCompile Include="MemoryPager.cpp" />
     <ClCompile Include="Profiler.cpp" />
+    <ClCompile Include="TimedEvent.cpp" />
+    <ClCompile Include="Timer.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

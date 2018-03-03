@@ -1,26 +1,27 @@
 ﻿#ifndef _PROFILER_H
 #define _PROFILER_H
 
+#include <chrono>
 #include "MemoryPager.h"
-
-// Single event data
-struct ProfilerEvent
-{
-  int32_t startTime;   // 4 -> 4
-	int32_t duration;    // 4 -> 8
-	int32_t color;       // 4 -> 12
-	int32_t depth;       // 4 -> 16
-  char name[64];        // 64 -> 80
-};
 
 // Per-thread event manager
 class ProfilerEventManager
 {
 public:
+	// Single event data
+	struct ProfilerEvent
+	{
+		unsigned long long startTime;   // 8 -> 8
+		unsigned long long duration;    // 8 -> 16
+		uint32_t color;									// 4 -> 20
+		uint32_t depth;									// 4 -> 24
+		char name[64];									// 64 -> 88
+	};
+
   ProfilerEventManager();
   ~ProfilerEventManager() {}
 
-  void PushEvent(uint32_t color, const char* pFormat);
+	ProfilerEventManager::ProfilerEvent* PushEvent(uint32_t color, const char* pFormat);
   void PopEvent();
 
   std::vector<MemoryPager::Page*> &GetPages() { return m_pages; }
@@ -46,11 +47,11 @@ private:
 class Profiler
 {
 public:
-  static const uint32_t kMaxProfileTime = (uint32_t)10e3; // 10 second buffer
+  static const unsigned long long kMaxProfileTime = (unsigned long long)(10e9); // 10 second buffer
   struct FrameTime
   {
-		int32_t startTime;
-		int32_t duration;
+		unsigned long long startTime;
+		unsigned long long duration;
   };
 
   static Profiler* Get() { return &s_profiler; }
@@ -58,7 +59,7 @@ public:
   // return the current threads event manager
   ProfilerEventManager* GetEventManager();
   
-  void BeginEvent(uint32_t color, const char* pFormat, ...);
+  ProfilerEventManager::ProfilerEvent* BeginEvent(uint32_t color, const char* aName);
   void EndEvent();
 
   void BeginFrame();
@@ -82,7 +83,7 @@ private:
     uint32_t maxDepth; // max event depth for this thread
 
     std::vector<MemoryPager::Page*> pages;
-    std::vector<ProfilerEvent*> events;
+    std::vector<ProfilerEventManager::ProfilerEvent*> events;
   };
 
   std::vector<FrameTime> m_frameTimes;
@@ -93,13 +94,16 @@ private:
   std::vector<ThreadEventInfo> m_captureInfo;
   std::vector<FrameTime> m_captureFrameTimes;
   uint32_t m_numEventsInCapture;
-  uint32_t m_captureTime;
+  unsigned long long m_captureTime;
   FrameTime m_longestFrame;
 
   // Profiler type data
   int m_precedingFrameTime;
   int m_procedingFrameTime;
   int m_lastXAmountOfTime;
+
+	// Frame timer helpers
+	std::chrono::high_resolution_clock::time_point frameStart;
 };
 
 #endif

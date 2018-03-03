@@ -5,6 +5,7 @@
 #include <tchar.h>
 
 #include "Profiler.h"
+#include "TimedEvent.h"
 
 // Data
 static ID3D11Device*            g_pd3dDevice = NULL;
@@ -104,8 +105,14 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
   return DefWindowProc(hWnd, msg, wParam, lParam);
 }
 
+static std::chrono::high_resolution_clock::time_point globalstarttime;
+static std::chrono::high_resolution_clock::time_point globalcurrenttime;
+static unsigned long long globalSecondsPassed;
+
 int main(int, char**)
 {
+	globalstarttime = std::chrono::high_resolution_clock::now();
+
   // Create application window
   WNDCLASSEX wc = { sizeof(WNDCLASSEX), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(NULL), NULL, LoadCursor(NULL, IDC_ARROW), NULL, NULL, _T("ImGui Example"), NULL };
   RegisterClassEx(&wc);
@@ -128,6 +135,7 @@ int main(int, char**)
 
 	// Frame variales
 	int frameCounter = 0;
+	Timer::Init();
 
   // Main loop
   MSG msg;
@@ -140,17 +148,19 @@ int main(int, char**)
       DispatchMessage(&msg);
       continue;
     }
-    Profiler::Get()->BeginFrame();
+		globalcurrenttime = std::chrono::high_resolution_clock::now();
+		globalSecondsPassed = std::chrono::duration_cast<std::chrono::seconds>(globalcurrenttime - globalstarttime).count();
 
-		Profiler::Get()->BeginEvent(0, "Random event 1 %i", frameCounter);
-		Sleep(20 + (rand() % 20));
-		Profiler::Get()->EndEvent();
+    Profiler::Get()->BeginFrame();
+		
+		{
+			SCOPED_EVENT(EventTest);
+			Sleep(1);// +(rand() % 5));
+		}
 
     ImGuiImplNewFrame();
 
-		Profiler::Get()->BeginEvent(0, "Profiler render" );
     Profiler::Get()->Render();
-		Profiler::Get()->EndEvent();
 
     // Rendering
     static ImVec4 clearCol = ImColor(114, 144, 154);

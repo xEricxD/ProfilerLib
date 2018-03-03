@@ -5,7 +5,7 @@
 #include "Profiler.h"
 #include "imgui/imgui.h"
 #include "ImGuiExtended.h"
-
+#include "Timer.h"
 
 uint32_t StringToColor(const char* str)
 {
@@ -59,15 +59,14 @@ ProfilerEventManager::ProfilerEventManager()
   : m_currentPage(nullptr), m_stackPage(nullptr)
   , m_eventDepth(0)
 {
-  strcpy_s(m_threadName, "test name");
+  strcpy_s(m_threadName, "test thread");
   m_threadID = (uint32_t)__threadid();
 }
 
-void ProfilerEventManager::PushEvent(uint32_t color, const char* pFormat)
+ProfilerEventManager::ProfilerEvent* ProfilerEventManager::PushEvent(uint32_t color, const char* pFormat)
 {
   ProfilerEvent ev;
 
-  ev.startTime = clock();
   ev.depth = m_eventDepth++;
   ev.color = color;
 
@@ -76,7 +75,7 @@ void ProfilerEventManager::PushEvent(uint32_t color, const char* pFormat)
 	memset(ev.name, 0, 64);
   memcpy(ev.name, pFormat, len > 64 ? 64 : len);
 
-  // Check if event will fit in current page
+  // Check if event will fit in current page // TODO - free stack pages??
   if (m_stackPage == nullptr)
   {
     m_stackPage = MemoryPager::Get()->GetPage();
@@ -95,14 +94,14 @@ void ProfilerEventManager::PushEvent(uint32_t color, const char* pFormat)
 
   // Update page variables
   m_stackPage->bufferWriteOffset += sizeof(ProfilerEvent);
+
+	return (ProfilerEvent*)m_stackPage->bufferCurrent;
 }
 
 void ProfilerEventManager::PopEvent()
 {
   ProfilerEvent* ev = m_eventStack.back();
   m_eventStack.pop_back();
-
-  ev->duration = clock() - ev->startTime;
 
   if (ev->duration >= 1)
   {
@@ -157,15 +156,9 @@ ProfilerEventManager* Profiler::GetEventManager()
   return g_manager;
 }
 
-void Profiler::BeginEvent(uint32_t color, const char* pFormat, ...)
+ProfilerEventManager::ProfilerEvent* Profiler::BeginEvent(uint32_t color, const char* aName)
 {
-  char temp[1024];
-  // Copy name
-  va_list argptr;
-  va_start(argptr, pFormat);
-  vsprintf_s(temp, 1024, pFormat, argptr);
-  GetEventManager()->PushEvent(color, temp);
-  va_end(argptr);
+	return GetEventManager()->PushEvent(color, aName);
 }
 
 void Profiler::EndEvent()
@@ -175,11 +168,14 @@ void Profiler::EndEvent()
 
 void Profiler::BeginFrame()
 {
-  // Remove outdated frame times
-  int currTime = clock();
+	// Get current time
+	frameStart = std::chrono::high_resolution_clock::now();
+  unsigned long long currTime = (frameStart - Timer::GetGlobalStartTime()).count();
+
+	// Remove outdated frame times
   for (auto it = m_frameTimes.begin(); it != m_frameTimes.end();)
   {
-    if (currTime > kMaxProfileTime && it->startTime + it->duration < (int)(currTime - kMaxProfileTime))
+    if (currTime > kMaxProfileTime && it->startTime + it->duration < (currTime - kMaxProfileTime))
       it = m_frameTimes.erase(it);
     else
       it++;
@@ -187,7 +183,7 @@ void Profiler::BeginFrame()
 
   // start new frame
   FrameTime ft;
-  ft.startTime = clock();
+	ft.startTime = currTime;
   ft.duration = 0;
   m_frameTimes.push_back(ft);
 
@@ -197,12 +193,14 @@ void Profiler::BeginFrame()
 
 void Profiler::EndFrame()
 {
-  m_frameTimes.back().duration = clock() - m_frameTimes.back().startTime;
+	std::chrono::high_resolution_clock::time_point end = std::chrono::high_resolution_clock::now();
+	auto elaps = end - frameStart;
+  m_frameTimes.back().duration = (elaps).count();
 }
 
 void Profiler::ClearOutdatedEvents()
 {
-  uint32_t currTime = clock();
+  unsigned long long currTime = (frameStart - Timer::GetGlobalStartTime()).count();
 
   for (auto it = m_managers.begin(); it != m_managers.end(); it++)
   {
@@ -213,13 +211,14 @@ void Profiler::ClearOutdatedEvents()
     {
       MemoryPager::Page* page = *p;
       page->bufferCurrent = page->bufferStart + page->bufferReadOffset;
-      while (page->bufferReadOffset < page->bufferWriteOffset)
-      {
-        ProfilerEvent* ev = reinterpret_cast<ProfilerEvent*>(page->bufferCurrent);
-        if (ev->startTime + ev->duration >= currTime - (kMaxProfileTime * 1e3))
+			while (page->bufferReadOffset < page->bufferWriteOffset)
+			{
+				ProfilerEventManager::ProfilerEvent* ev = reinterpret_cast<ProfilerEventManager::ProfilerEvent*>(page->bufferCurrent);
+				if (currTime < kMaxProfileTime || ev->startTime + ev->duration >= currTime - kMaxProfileTime)
           break;
 
-        page->bufferReadOffset += sizeof(ProfilerEvent);
+        page->bufferReadOffset += sizeof(ProfilerEventManager::ProfilerEvent);
+				page->bufferCurrent = page->bufferStart + page->bufferReadOffset;
       }
 
       // Check if page is fully outdated, and release if it is
@@ -245,7 +244,8 @@ void Profiler::GetCurrentCapture()
   }
   m_captureInfo.clear();
 
-  m_captureTime = clock();
+	std::chrono::high_resolution_clock::time_point captureTime = std::chrono::high_resolution_clock::now();
+	m_captureTime = (captureTime - Timer::GetGlobalStartTime()).count();
 
   // Get current data
   for (auto pem = m_managers.begin(); pem != m_managers.end(); pem++)
@@ -276,10 +276,10 @@ void Profiler::GetCurrentCapture()
       newPage->bufferCurrent = newPage->bufferStart + currRead;
       while (currRead < newPage->bufferWriteOffset)
       {
-        ProfilerEvent* ev = reinterpret_cast<ProfilerEvent*>(newPage->bufferCurrent);
+				ProfilerEventManager::ProfilerEvent* ev = reinterpret_cast<ProfilerEventManager::ProfilerEvent*>(newPage->bufferCurrent);
         info.events.push_back(ev);
-        currRead += sizeof(ProfilerEvent);
-        newPage->bufferCurrent += sizeof(ProfilerEvent);
+        currRead += sizeof(ProfilerEventManager::ProfilerEvent);
+        newPage->bufferCurrent += sizeof(ProfilerEventManager::ProfilerEvent);
 
         if (ev->depth > info.maxDepth)
           info.maxDepth = ev->depth;
@@ -349,8 +349,9 @@ void Profiler::Render()
   ImGui::SliderFloat("Zoom (temp)", &zoomLevel, 0, 1000);
 
   // Setup some information we need to help display
-  int startTime = 0;
-	int displayTime = 0; // total time we will display for this frame
+  unsigned long long startTime = 0;
+	unsigned long long displayTime = 0; // total time we will display for this frame
+	uint32_t displayTimeMS = 0;
   switch (type)
   {
   case kShowLongestFrame:
@@ -362,8 +363,9 @@ void Profiler::Render()
     displayTime = m_precedingFrameTime + m_longestFrame.duration + m_procedingFrameTime;
     break;
   case kLastXMilliseconds:
-    startTime = m_captureTime - m_lastXAmountOfTime;
-    displayTime = m_lastXAmountOfTime;
+    startTime = m_captureTime - (m_lastXAmountOfTime * 1e6);
+    displayTime = (m_lastXAmountOfTime * 1e6);
+		displayTimeMS = m_lastXAmountOfTime;
     break;
   }
 	  
@@ -390,13 +392,16 @@ void Profiler::Render()
 	
 	// Set the event window size
 	ImVec2 curPosStart = ImGui::GetCursorScreenPos();
-	ImGui::SetCursorScreenPos(ImVec2(curPosStart.x + (step * displayTime), ImGui::GetWindowPos().y));
+	ImGui::SetCursorScreenPos(ImVec2(curPosStart.x + (step * displayTimeMS), ImGui::GetWindowPos().y));
 	ImGui::SetCursorScreenPos(ImVec2(curPosStart.x, ImGui::GetWindowPos().y));
 	
 	// calculate visibility
-	int displayTimeStart = (int)(ImGui::GetScrollX() / step); // round down
-	int displayTimeEnd = std::fmin((int)(displayTimeStart + ImGui::GetWindowSize().x / step) + 2, displayTime); // round up;
-	int displayTimeVisible = displayTimeEnd - displayTimeStart;
+	uint32_t displayTimeStart = (int)(ImGui::GetScrollX() / step); // round down
+	uint32_t displayTimeEnd = std::fmin((int)(displayTimeStart + ImGui::GetWindowSize().x / step) + 2, displayTimeMS); // round up;
+	uint32_t displayTimeVisible = displayTimeEnd - displayTimeStart;
+
+	unsigned long long displayTimeStartActual = displayTimeStart * 1e6;
+	unsigned long long displayTimeVisibleActual = displayTimeVisible * 1e6;
 
 	// Set cursorpos to first visible ms
 	ImGui::SetCursorScreenPos(ImVec2(curPosStart.x + (step * displayTimeStart), ImGui::GetWindowPos().y));
@@ -410,7 +415,7 @@ void Profiler::Render()
     ImGui::SetCursorScreenPos(ImVec2(curPos.x + step, ImGui::GetWindowPos().y));
   }
   cursorScreenPosStart.y += ImGui::GetTextLineHeight();
-  ImVec2 cursorScreenPosEnd = ImVec2(cursorScreenPosStart.x + (step * displayTime), cursorScreenPosStart.y);
+  ImVec2 cursorScreenPosEnd = ImVec2(cursorScreenPosStart.x + (step * displayTimeMS), cursorScreenPosStart.y);
 
   ImGui::SetCursorScreenPos(cursorScreenPosStart);
 
@@ -425,7 +430,7 @@ void Profiler::Render()
 
   for (auto it = m_captureFrameTimes.begin(); it != m_captureFrameTimes.end(); it++)
   {
-    if (it->startTime + it->duration < startTime + displayTimeStart || it->startTime > startTime + displayTimeStart + displayTimeVisible)
+    if (it->startTime + it->duration < startTime + displayTimeStartActual || it->startTime > startTime + displayTimeStartActual + displayTimeVisibleActual)
       continue;
 
     // Frame is atleast partially inside the time we're displaying, so render it
@@ -439,11 +444,11 @@ void Profiler::Render()
 
     if (ImGui_ClipRect(framePos, frameEnd, clipRectPos, clipRectEnd))
     {
-      ImGui::GetWindowDrawList()->AddRectFilled(framePos, frameEnd, IM_COL32(std::fmin(it->duration * 5, 255), 200, 200, 255)); // TODO - randomize frame color
+      ImGui::GetWindowDrawList()->AddRectFilled(framePos, frameEnd, IM_COL32(rand() % 255, rand() % 255, rand() % 255, 255)); // TODO - randomize frame color
       if (ImGui_IsItemHovered(framePos, frameEnd))
       {
         ImGui::BeginTooltip();
-        ImGui::Text("Frame time: %ums", it->duration);
+        ImGui::Text("Frame time: %.2fms", it->duration * (1.0f / 1e6));
         ImGui::EndTooltip();
       }
     }
@@ -457,14 +462,21 @@ void Profiler::Render()
 	cursorScreenPosStart.y += lineheight;
 	ImGui::SetCursorScreenPos(cursorScreenPosStart);
 	ImGui::EndChild();
+	
+	// update thread data positions
+	ImGui::BeginChild("ThreadData", ImVec2(ImGui::GetWindowSize().x * 0.15f, 0), false, ImGuiWindowFlags_NoScrollbar);
+	ImVec2 threadDataCursorPos = ImGui::GetCursorPos();
+	ImGui::SetCursorPos(ImVec2(threadDataCursorPos.x, threadDataCursorPos.y + lineheight + ImGui::GetTextLineHeight()));
+	ImGui::EndChild();
 
 	// Draw events for each thread
 	for (auto it = m_captureInfo.begin(); it != m_captureInfo.end(); it++)
 	{
 		ThreadEventInfo &info = *it;
 
-		// TODO - render thread info for left panel (name, num events, etc)
 		ImGui::BeginChild("ThreadData", ImVec2(ImGui::GetWindowSize().x * 0.15f, 0), false, ImGuiWindowFlags_NoScrollbar);
+		ImGui::Text(info.threadName);
+		ImGui::SetCursorPos(ImVec2(threadDataCursorPos.x, ImGui::GetCursorPos().y + lineheight));
 		ImGui::EndChild();
 
 		// Render event data
@@ -472,10 +484,10 @@ void Profiler::Render()
 		// TODO - clip event range (binary search)
 		for (auto evIt = info.events.begin(); evIt != info.events.end(); evIt++)
 		{
-			ProfilerEvent* ev = *evIt;
+			ProfilerEventManager::ProfilerEvent* ev = *evIt;
 
 			// Clip if event is out of visible range
-			if (ev->startTime + ev->duration < startTime + displayTimeStart || ev->startTime > startTime + displayTimeStart + displayTimeVisible)
+			if (ev->startTime + ev->duration < startTime + displayTimeStartActual || ev->startTime > startTime + displayTimeStartActual + displayTimeVisibleActual)
 				continue;
 
 			// Calculate start pos
@@ -492,7 +504,7 @@ void Profiler::Render()
 				if (ImGui_IsItemHovered(framePos, frameEnd))
 				{
 					ImGui::BeginTooltip();
-					ImGui::Text("%s (%ums)", ev->name, ev->duration);
+					ImGui::Text("%s (%.2fms)", ev->name, ev->duration * (1.0f / 1e6));
 					ImGui::EndTooltip();
 				}
 			}
