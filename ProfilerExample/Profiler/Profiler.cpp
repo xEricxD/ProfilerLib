@@ -476,7 +476,7 @@ void Profiler::Render()
 
 		ImGui::BeginChild("ThreadData", ImVec2(ImGui::GetWindowSize().x * 0.15f, 0), false, ImGuiWindowFlags_NoScrollbar);
 		ImGui::Text(info.threadName);
-		ImGui::SetCursorPos(ImVec2(threadDataCursorPos.x, ImGui::GetCursorPos().y + lineheight));
+		ImGui::SetCursorPos(ImVec2(threadDataCursorPos.x, ImGui::GetCursorPos().y + (lineheight * it->maxDepth)));
 		ImGui::EndChild();
 
 		// Render event data
@@ -493,15 +493,15 @@ void Profiler::Render()
 			// Calculate start pos
 			float totalProfileLength = (float)(cursorScreenPosEnd.x - cursorScreenPosStart.x);
 			float startP = (float)(ev->startTime - startTime) / displayTime;
-			ImVec2 framePos((startP * totalProfileLength) + cursorScreenPosStart.x, cursorScreenPosStart.y);
+			ImVec2 eventPos((startP * totalProfileLength) + cursorScreenPosStart.x, cursorScreenPosStart.y);
 			// Calculate size
-			ImVec2 frameSize(((float)ev->duration / displayTime) * totalProfileLength, itemHeight);
-			ImVec2 frameEnd(framePos.x + frameSize.x, framePos.y + frameSize.y);
+			ImVec2 eventSize(((float)ev->duration / displayTime) * totalProfileLength, itemHeight * (ev->depth + 1));
+			ImVec2 eventEnd(eventPos.x + eventSize.x, eventPos.y + eventSize.y);
 
-			if (ImGui_ClipRect(framePos, frameEnd, clipRectPos, clipRectEnd))
+			if (ImGui_ClipRect(eventPos, eventEnd, clipRectPos, clipRectEnd))
 			{
-				ImGui::GetWindowDrawList()->AddRectFilled(framePos, frameEnd, ev->color);
-				if (ImGui_IsItemHovered(framePos, frameEnd))
+				ImGui::GetWindowDrawList()->AddRectFilled(eventPos, eventEnd, ev->color);
+				if (ImGui_IsItemHovered(eventPos, eventEnd))
 				{
 					ImGui::BeginTooltip();
 					ImGui::Text("%s (%.2fms)", ev->name, ev->duration * (1.0f / 1e6));

@@ -155,8 +155,37 @@ int main(int, char**)
 		
 		{
 			SCOPED_EVENT(EventTest);
-			Sleep(1);// +(rand() % 5));
-		}
+			Sleep(1); 
+			{
+				SCOPED_EVENT(wrtg);
+				Sleep(2);
+			}
+			Sleep(1);
+			{
+				SCOPED_EVENT(asdasda);
+				Sleep(2); 
+				{
+					SCOPED_EVENT(fzwf32r);
+					Sleep(3);
+				}
+				Sleep(1);
+			}
+		} 
+		//
+		//{
+		//	SCOPED_EVENT(eventnr2);
+		//	Sleep(rand()%5);// +(rand() % 5));
+		//}
+
+		//EVENT_START(ert1);
+		//Sleep(rand() % 3);
+		//EVENT_START(ert2);
+		//Sleep(rand() % 2);
+		//EVENT_START(ert3);
+		//Sleep(1);
+		//EVENT_END();
+		//EVENT_END();
+		//EVENT_END();
 
     ImGuiImplNewFrame();
 
