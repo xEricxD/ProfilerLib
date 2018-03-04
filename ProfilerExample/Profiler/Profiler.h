@@ -52,6 +52,7 @@ public:
   {
 		unsigned long long startTime;
 		unsigned long long duration;
+		int32_t color;
   };
 
   static Profiler* Get() { return &s_profiler; }
@@ -66,6 +67,7 @@ public:
   void EndFrame();
 
   void Render();
+	void UpdateZoom();
 
 private:
   Profiler();
@@ -102,8 +104,11 @@ private:
   int m_procedingFrameTime;
   int m_lastXAmountOfTime;
 
+	float m_framesPerSecond;
+	float m_zoom;
+
 	// Frame timer helpers
-	std::chrono::high_resolution_clock::time_point frameStart;
+	std::chrono::high_resolution_clock::time_point m_frameStart;
 };
 
 #endif

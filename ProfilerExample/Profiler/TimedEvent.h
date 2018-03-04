@@ -6,8 +6,9 @@ struct TimedEvent;
 
 #define SCOPED_EVENT(name) TimedEvent name(0, #name)
 #define SCOPED_EVENT_COLORED(name, color) TimedEvent name(color, #name)
-#define EVENT_START(name) {\
-														TimedEvent(0, #name)
+
+#define EVENT_START(name) {	\
+														TimedEvent name(0, #name)
 #define EVENT_END() }
 
 struct TimedEvent

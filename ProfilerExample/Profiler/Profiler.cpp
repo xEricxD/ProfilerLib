@@ -136,12 +136,22 @@ void ProfilerEventManager::PopEvent()
 Profiler Profiler::s_profiler;
 
 Profiler::Profiler()
-  : m_isOpen(true), m_numEventsInCapture(0)
+  : m_isOpen(true), m_numEventsInCapture(0), m_zoom(0)
   , m_precedingFrameTime(10), m_procedingFrameTime(10), m_lastXAmountOfTime((int)(100))
 {}
 
 Profiler::~Profiler()
 {}
+
+void Profiler::UpdateZoom()
+{
+	// TODO - update scroll position based on scroll amount
+	if (ImGui::GetIO().MouseWheel)
+	{
+		m_zoom += ImGui::GetIO().MouseWheel * 10.0f;
+		m_zoom = std::fmax(std::fmin(m_zoom, 1000.0f), 0.0f);
+	}
+}
 
 // Create a per-thread manager
 thread_local ProfilerEventManager* g_manager = nullptr;
@@ -169,8 +179,8 @@ void Profiler::EndEvent()
 void Profiler::BeginFrame()
 {
 	// Get current time
-	frameStart = std::chrono::high_resolution_clock::now();
-  unsigned long long currTime = (frameStart - Timer::GetGlobalStartTime()).count();
+	m_frameStart = std::chrono::high_resolution_clock::now();
+  unsigned long long currTime = (m_frameStart - Timer::GetGlobalStartTime()).count();
 
 	// Remove outdated frame times
   for (auto it = m_frameTimes.begin(); it != m_frameTimes.end();)
@@ -194,13 +204,18 @@ void Profiler::BeginFrame()
 void Profiler::EndFrame()
 {
 	std::chrono::high_resolution_clock::time_point end = std::chrono::high_resolution_clock::now();
-	auto elaps = end - frameStart;
-  m_frameTimes.back().duration = (elaps).count();
+	auto elaps = end - m_frameStart;
+	FrameTime& frame = m_frameTimes.back();
+	frame.duration = (elaps).count();
+	frame.color = IM_COL32(rand() % 255, rand() % 255, rand() % 255, 255); // TODO - scale based on duration? e.g. red when frame is long
+
+	// Update fps counter
+	m_framesPerSecond = 1e9 / frame.duration;
 }
 
 void Profiler::ClearOutdatedEvents()
 {
-  unsigned long long currTime = (frameStart - Timer::GetGlobalStartTime()).count();
+  unsigned long long currTime = (m_frameStart - Timer::GetGlobalStartTime()).count();
 
   for (auto it = m_managers.begin(); it != m_managers.end(); it++)
   {
@@ -301,6 +316,7 @@ void Profiler::GetCurrentCapture()
 
 void Profiler::Render()
 {
+	UpdateZoom();
   ImGuiIO io = ImGui::GetIO();
 
   ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.1f, io.DisplaySize.y * 0.1f), ImGuiSetCond_Once);
@@ -344,9 +360,7 @@ void Profiler::Render()
   }
 
   ImGui::Text("Showing %u events for %u threads, %u Pages created, total mem: %s", m_numEventsInCapture, m_managers.size(), MemoryPager::Get()->GetNumPages(), BytesToSize((float)MemoryPager::Get()->GetNumPages() * MemoryPager::kPageSize).c_str());
-
-  static float zoomLevel = 100.0f;
-  ImGui::SliderFloat("Zoom (temp)", &zoomLevel, 0, 1000);
+	ImGui::Text("FPS: %.2f", m_framesPerSecond);
 
   // Setup some information we need to help display
   unsigned long long startTime = 0;
@@ -371,6 +385,7 @@ void Profiler::Render()
 	  
   // Create profiler layout, will be filled with data later
   ImGui::BeginChild("ThreadData", ImVec2(ImGui::GetWindowSize().x * 0.15f, 0), false, ImGuiWindowFlags_NoScrollbar);
+	ImGui::Text("Frame times");
   ImGui::EndChild();
 
   ImGui::SameLine();
@@ -387,7 +402,7 @@ void Profiler::Render()
   ImVec2 cursorScreenPosStart = ImGui::GetCursorScreenPos();
 
   // Calculate how big each MS will be displayed
-  float step = 20 + (zoomLevel * 0.2f);
+  float step = 20 + (m_zoom * 0.2f);
   ImGui::SetCursorScreenPos(ImVec2(cursorScreenPosStart.x, ImGui::GetWindowPos().y));
 	
 	// Set the event window size
@@ -427,16 +442,18 @@ void Profiler::Render()
 	// Calculate default item height we'll be using
 	float itemHeight = (ImGui::GetWindowFontSize() + ImGui::GetStyle().FramePadding.y * 2) * 0.35f;
 	float lineheight = itemHeight * 1.2f;
+	float totalProfileLength = (float)(cursorScreenPosEnd.x - cursorScreenPosStart.x);
 
   for (auto it = m_captureFrameTimes.begin(); it != m_captureFrameTimes.end(); it++)
   {
-    if (it->startTime + it->duration < startTime + displayTimeStartActual || it->startTime > startTime + displayTimeStartActual + displayTimeVisibleActual)
+    if (it->startTime + it->duration < startTime + displayTimeStartActual)
       continue;
+		if (it->startTime > startTime + displayTimeStartActual + displayTimeVisibleActual)
+			break;
 
     // Frame is atleast partially inside the time we're displaying, so render it
     // Calculate start pos
-    float totalProfileLength = (float)(cursorScreenPosEnd.x - cursorScreenPosStart.x);
-    float startP = (float)(it->startTime - startTime) / displayTime;
+    float startP = (float)((float)it->startTime - startTime) / displayTime;
     ImVec2 framePos((startP * totalProfileLength) + cursorScreenPosStart.x, cursorScreenPosStart.y);
     // Calculate size
     ImVec2 frameSize(((float)it->duration / displayTime) * totalProfileLength, itemHeight);
@@ -444,7 +461,7 @@ void Profiler::Render()
 
     if (ImGui_ClipRect(framePos, frameEnd, clipRectPos, clipRectEnd))
     {
-      ImGui::GetWindowDrawList()->AddRectFilled(framePos, frameEnd, IM_COL32(rand() % 255, rand() % 255, rand() % 255, 255)); // TODO - randomize frame color
+      ImGui::GetWindowDrawList()->AddRectFilled(framePos, frameEnd, it->color);
       if (ImGui_IsItemHovered(framePos, frameEnd))
       {
         ImGui::BeginTooltip();
@@ -466,7 +483,7 @@ void Profiler::Render()
 	// update thread data positions
 	ImGui::BeginChild("ThreadData", ImVec2(ImGui::GetWindowSize().x * 0.15f, 0), false, ImGuiWindowFlags_NoScrollbar);
 	ImVec2 threadDataCursorPos = ImGui::GetCursorPos();
-	ImGui::SetCursorPos(ImVec2(threadDataCursorPos.x, threadDataCursorPos.y + lineheight + ImGui::GetTextLineHeight()));
+	ImGui::SetCursorPos(ImVec2(threadDataCursorPos.x, threadDataCursorPos.y + lineheight));
 	ImGui::EndChild();
 
 	// Draw events for each thread
@@ -481,21 +498,24 @@ void Profiler::Render()
 
 		// Render event data
 		ImGui::BeginChild("EventData", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
+		ImGui::Separator();
+
 		// TODO - clip event range (binary search)
 		for (auto evIt = info.events.begin(); evIt != info.events.end(); evIt++)
 		{
 			ProfilerEventManager::ProfilerEvent* ev = *evIt;
 
 			// Clip if event is out of visible range
-			if (ev->startTime + ev->duration < startTime + displayTimeStartActual || ev->startTime > startTime + displayTimeStartActual + displayTimeVisibleActual)
+			if (ev->startTime + ev->duration < startTime + displayTimeStartActual)
 				continue;
+			if (ev->startTime > startTime + displayTimeStartActual + displayTimeVisibleActual)
+				break;
 
 			// Calculate start pos
-			float totalProfileLength = (float)(cursorScreenPosEnd.x - cursorScreenPosStart.x);
-			float startP = (float)(ev->startTime - startTime) / displayTime;
-			ImVec2 eventPos((startP * totalProfileLength) + cursorScreenPosStart.x, cursorScreenPosStart.y);
+			float startP = (float)((float)ev->startTime - startTime) / displayTime;
+			ImVec2 eventPos((startP * totalProfileLength) + cursorScreenPosStart.x, cursorScreenPosStart.y + itemHeight * ev->depth);
 			// Calculate size
-			ImVec2 eventSize(((float)ev->duration / displayTime) * totalProfileLength, itemHeight * (ev->depth + 1));
+			ImVec2 eventSize(((float)ev->duration / displayTime) * totalProfileLength, itemHeight);
 			ImVec2 eventEnd(eventPos.x + eventSize.x, eventPos.y + eventSize.y);
 
 			if (ImGui_ClipRect(eventPos, eventEnd, clipRectPos, clipRectEnd))

@@ -79,8 +79,8 @@ void CleanupDeviceD3D()
 extern LRESULT ImGuiImplWndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
-  if (ImGuiImplWndProcHandler(hWnd, msg, wParam, lParam))
-    return 0;
+	if (ImGuiImplWndProcHandler(hWnd, msg, wParam, lParam))
+		return 0;
 
   switch (msg)
   {
@@ -153,39 +153,34 @@ int main(int, char**)
 
     Profiler::Get()->BeginFrame();
 		
-		{
-			SCOPED_EVENT(EventTest);
-			Sleep(1); 
-			{
-				SCOPED_EVENT(wrtg);
-				Sleep(2);
-			}
-			Sleep(1);
-			{
-				SCOPED_EVENT(asdasda);
-				Sleep(2); 
-				{
-					SCOPED_EVENT(fzwf32r);
-					Sleep(3);
-				}
-				Sleep(1);
-			}
-		} 
-		//
 		//{
-		//	SCOPED_EVENT(eventnr2);
-		//	Sleep(rand()%5);// +(rand() % 5));
+		//	SCOPED_EVENT(EventTest);
+		//	Sleep(1); 
+		//	{
+		//		SCOPED_EVENT(wrtg);
+		//		Sleep(2);
+		//	}
+		//	Sleep(1);
+		//	{
+		//		SCOPED_EVENT(asdasda);
+		//		Sleep(2); 
+		//		{
+		//			SCOPED_EVENT(fzwf32r);
+		//			Sleep(3);
+		//		}
+		//		Sleep(1);
+		//	}
 		//}
 
-		//EVENT_START(ert1);
-		//Sleep(rand() % 3);
-		//EVENT_START(ert2);
-		//Sleep(rand() % 2);
-		//EVENT_START(ert3);
-		//Sleep(1);
-		//EVENT_END();
-		//EVENT_END();
-		//EVENT_END();
+		EVENT_START(sdfsdfsf);
+		Sleep(rand() % 3);
+		EVENT_START(afwefa);
+		Sleep(rand() % 2);
+		EVENT_START(a124234a);
+		Sleep(1);
+		EVENT_END();
+		EVENT_END();
+		EVENT_END();
 
     ImGuiImplNewFrame();
 
@@ -199,7 +194,6 @@ int main(int, char**)
     g_pSwapChain->Present(0, 0);
 
     Profiler::Get()->EndFrame();
-
 		frameCounter++;
   }
 
